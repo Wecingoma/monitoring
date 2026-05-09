@@ -271,4 +271,5 @@ Exemple de réponse IA :
 
 ## Licence
 
-Ce projet est développé dans un cadre académique et professionnel.
+Ce projet est développé dans un cadre académique et professionnel.#   m o n i t o r i n g  
+ 
