@@ -1,0 +1,181 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: ./backend-laravel
+      dockerfile: Dockerfile
+    container_name: monitoria-app
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ./backend-laravel:/var/www/html
+    ports:
+      - "8000:8000"
+    networks:
+      - monitoria
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      - DB_CONNECTION=pgsql
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_DATABASE=monitoring
+      - DB_USERNAME=monitoring_user
+      - DB_PASSWORD=secret123
+      - REDIS_CLIENT=predis
+      - REDIS_HOST=redis
+      - REDIS_PASSWORD=null
+      - REDIS_PORT=6379
+      - CACHE_STORE=redis
+      - SESSION_DRIVER=redis
+      - QUEUE_CONNECTION=redis
+
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: monitoria-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./backend-laravel:/var/www/html
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - monitoria
+    depends_on:
+      - app
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: monitoria-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: monitoring
+      POSTGRES_USER: monitoring_user
+      POSTGRES_PASSWORD: secret123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - monitoria
+
+  redis:
+    image: redis:7-alpine
+    container_name: monitoria-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - monitoria
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    container_name: monitoria-elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - cluster.name=monitoria
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    networks:
+      - monitoria
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.13.0
+    container_name: monitoria-kibana
+    restart: unless-stopped
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    depends_on:
+      - elasticsearch
+    networks:
+      - monitoria
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.13.0
+    container_name: monitoria-logstash
+    restart: unless-stopped
+    volumes:
+      - ./docker/logstash/pipeline:/usr/share/logstash/pipeline
+    depends_on:
+      - elasticsearch
+    networks:
+      - monitoria
+
+  zabbix-server:
+    image: zabbix/zabbix-server-pg:alpine-7.0-latest
+    container_name: monitoria-zabbix-server
+    restart: unless-stopped
+    environment:
+      - DB_SERVER_HOST=postgres
+      - POSTGRES_DB=monitoring
+      - POSTGRES_USER=monitoring_user
+      - POSTGRES_PASSWORD=secret123
+      - ZBX_VALUECACHESIZE=128M
+    depends_on:
+      - postgres
+    networks:
+      - monitoria
+
+  zabbix-web:
+    image: zabbix/zabbix-web-nginx-pg:alpine-7.0-latest
+    container_name: monitoria-zabbix-web
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_SERVER_HOST=postgres
+      - POSTGRES_DB=monitoring
+      - POSTGRES_USER=monitoring_user
+      - POSTGRES_PASSWORD=secret123
+      - ZBX_SERVER_HOST=zabbix-server
+      - PHP_TZ=Europe/Paris
+    depends_on:
+      - postgres
+      - zabbix-server
+    networks:
+      - monitoria
+
+  python-ai:
+    build:
+      context: ./python-ai
+      dockerfile: Dockerfile
+    container_name: monitoria-python-ai
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./python-ai:/app
+      - ai_models:/app/models
+    networks:
+      - monitoria
+    environment:
+      - PORT=5000
+      - MODEL_DIR=/app/models
+      - FLASK_ENV=production
+
+networks:
+  monitoria:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  es_data:
+  ai_models:
