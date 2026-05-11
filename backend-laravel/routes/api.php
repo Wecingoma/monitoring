@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\ZabbixController;
 use App\Http\Controllers\Api\AiController;
 use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\GrafanaController;
+use App\Http\Controllers\Api\SyncController;
 
 Route::prefix('v1')->group(function () {
 
@@ -38,6 +39,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/servers/sync-zabbix', [ServerController::class, 'syncFromZabbix']);
         Route::post('/servers/{server}/detect-anomalies', [ServerController::class, 'detectAnomalies']);
 
+        Route::get('/alerts/new', [AlertController::class, 'newAlerts']);
         Route::apiResource('alerts', AlertController::class);
         Route::post('/alerts/{alert}/acknowledge', [AlertController::class, 'acknowledge']);
         Route::post('/alerts/{alert}/resolve', [AlertController::class, 'resolve']);
@@ -74,6 +76,11 @@ Route::prefix('v1')->group(function () {
         Route::get('/grafana/dashboards/{uid}', [GrafanaController::class, 'dashboard']);
         Route::get('/grafana/datasources', [GrafanaController::class, 'datasources']);
         Route::get('/grafana/alerts', [GrafanaController::class, 'alerts']);
+
+        Route::post('/sync/all', [SyncController::class, 'syncAll']);
+        Route::post('/sync/zabbix', [SyncController::class, 'syncZabbix']);
+        Route::get('/sync/elasticsearch', [SyncController::class, 'syncElasticsearch']);
+        Route::get('/sync/grafana', [SyncController::class, 'checkGrafana']);
 
         Route::get('/ai/detect/{server}', [AiController::class, 'detect']);
         Route::post('/ai/detect-all', [AiController::class, 'detectAll']);

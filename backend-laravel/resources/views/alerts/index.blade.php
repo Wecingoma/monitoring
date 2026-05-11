@@ -376,5 +376,6 @@ document.addEventListener('keydown', function(e) {
 });
 
 loadAlerts();
+setInterval(loadAlerts, 15000);
 </script>
 @endpush

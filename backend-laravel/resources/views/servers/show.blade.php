@@ -100,7 +100,7 @@ function renderAnomalyMini(a) {
                 '<div class="flex items-center gap-2">' +
                     '<span class="badge badge-info">' + (a.type || 'N/A') + '</span>' +
                     '<span class="' + sev.cls + '">' + sev.label + '</span>' +
-                    '<span class="text-xs font-mono text-muted-foreground">Score: ' + (a.score ? a.score.toFixed(2) : '0.00') + '</span>' +
+                    '<span class="text-xs font-mono text-muted-foreground">Score: ' + (a.score ? parseFloat(a.score).toFixed(2) : '0.00') + '</span>' +
                 '</div>' +
                 '<p class="text-sm text-foreground mt-1">' + (a.description || 'Anomalie détectée') + '</p>' +
                 '<p class="text-xs text-muted-foreground mt-0.5">' + (a.detected_at || '') + '</p>' +
@@ -150,7 +150,7 @@ async function loadServerDetail() {
                     metricCard('CPU', s.cpu_usage, '%', 'progress-blue') +
                     metricCard('RAM', s.ram_usage, '%', 'progress-green') +
                     metricCard('Disque', s.disk_usage, '%', 'progress-amber') +
-                    metricCard('Réseau', s.network_usage, '%', 'progress-purple') +
+                    metricCard('Réseau', s.network_usage, 'Mbps', 'progress-purple') +
                 '</div>' +
             '</div>' +
 
@@ -209,6 +209,7 @@ async function loadServerAlerts() {
         }
         container.innerHTML = alerts.map(renderAlertMini).join('');
     } catch (e) {
+        console.error('Alerts error:', e);
         container.innerHTML = '<p class="text-muted-foreground text-sm text-center py-8">Erreur de chargement</p>';
     }
 }
@@ -224,6 +225,7 @@ async function loadServerAnomalies() {
         }
         container.innerHTML = anomalies.map(renderAnomalyMini).join('');
     } catch (e) {
+        console.error('Anomalies error:', e);
         container.innerHTML = '<p class="text-muted-foreground text-sm text-center py-8">Erreur de chargement</p>';
     }
 }

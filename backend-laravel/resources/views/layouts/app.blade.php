@@ -35,9 +35,11 @@
         .header-subtitle { font-size: 12px; color: #71717a; margin-top: 1px; }
         .header-right { display: flex; align-items: center; gap: 16px; }
         .header-clock { font-size: 13px; color: #a1a1aa; font-variant-numeric: tabular-nums; font-weight: 500; }
-        .header-bell { position: relative; background: none; border: none; cursor: pointer; color: #71717a; padding: 6px; border-radius: 6px; transition: all 0.15s ease; }
+        .header-bell { position: relative; background: none; border: none; cursor: pointer; color: #71717a; padding: 6px; border-radius: 6px; transition: all 0.15s ease; text-decoration: none; display: flex; align-items: center; }
         .header-bell:hover { color: #e4e4e7; background: rgba(255,255,255,0.05); }
         .header-bell svg { width: 20px; height: 20px; }
+        .alert-badge { position: absolute; top: 2px; right: 2px; min-width: 18px; height: 18px; border-radius: 9px; background: #ef4444; color: #fff; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; padding: 0 4px; line-height: 1; animation: badge-pulse 2s ease-in-out infinite; }
+        @keyframes badge-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
         .toast-container { position: fixed; top: 80px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
         .toast { pointer-events: auto; min-width: 340px; max-width: 420px; background: #18181b; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 14px 16px; display: flex; gap: 12px; align-items: flex-start; animation: toast-slide-in 0.3s ease forwards; box-shadow: 0 8px 30px rgba(0,0,0,0.5); position: relative; overflow: hidden; }
         .toast.toast-removing { animation: toast-slide-out 0.25s ease forwards; }
@@ -84,6 +86,7 @@
                 <a href="/alerts" class="sidebar-link" data-path="/alerts">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                     Alertes
+                    <span id="sidebar-alert-badge" style="display:none;margin-left:auto;min-width:20px;height:20px;border-radius:10px;background:#ef4444;color:#fff;font-size:10px;font-weight:700;display:none;align-items:center;justify-content:center;padding:0 5px;line-height:1"></span>
                 </a>
                 <a href="/anomalies" class="sidebar-link" data-path="/anomalies">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 22h20L12 2z"/><line x1="12" y1="10" x2="12" y2="16"/><circle cx="12" cy="18.5" r="0.5" fill="currentColor"/></svg>
@@ -137,9 +140,10 @@
                 </div>
                 <div class="header-right">
                     <div class="header-clock" id="header-clock">--:--:--</div>
-                    <button class="header-bell" title="Notifications">
+                    <a href="/alerts" class="header-bell" title="Alertes">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-                    </button>
+                        <span class="alert-badge" id="alert-badge" style="display:none">0</span>
+                    </a>
                 </div>
             </header>
 
@@ -304,11 +308,38 @@
             }
         }
 
+        function updateAlertBadge() {
+            apiCall('/api/v1/alerts?status=active&per_page=1').then(function(data) {
+                var total = data.total || 0;
+                var badge = document.getElementById('alert-badge');
+                var sidebarBadge = document.getElementById('sidebar-alert-badge');
+                if (badge) {
+                    if (total > 0) {
+                        badge.textContent = total > 99 ? '99+' : total;
+                        badge.style.display = 'flex';
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                }
+                if (sidebarBadge) {
+                    if (total > 0) {
+                        sidebarBadge.textContent = total > 99 ? '99+' : total;
+                        sidebarBadge.style.display = 'flex';
+                    } else {
+                        sidebarBadge.style.display = 'none';
+                    }
+                }
+            }).catch(function() {});
+        }
+
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {
             init();
         }
+
+        setInterval(updateAlertBadge, 15000);
+        setTimeout(updateAlertBadge, 2000);
     })();
     </script>
 

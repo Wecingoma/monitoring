@@ -81,6 +81,32 @@
     </div>
 
     <div>
+        <h3 class="card-title mb-3" style="font-size:1.0625rem">Synchronisation des données</h3>
+        <div class="card">
+            <p class="text-sm text-muted-foreground mb-4">Synchronisez les données depuis les services connectés pour mettre à jour le dashboard avec les informations en temps réel.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <button onclick="syncZabbix()" id="btnSyncZabbix" class="flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-medium text-white transition-all hover:opacity-90" style="background:oklch(0.55 0.2 260)">
+                    <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9"/></svg>
+                    <span>Synchroniser Zabbix</span>
+                </button>
+                <button onclick="syncElasticsearch()" id="btnSyncElastic" class="flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-medium text-white transition-all hover:opacity-90" style="background:oklch(0.55 0.2 240)">
+                    <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9"/></svg>
+                    <span>Synchroniser Elasticsearch</span>
+                </button>
+                <button onclick="syncAll()" id="btnSyncAll" class="flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-medium text-white transition-all hover:opacity-90" style="background:oklch(0.55 0.2 290)">
+                    <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+                    <span>Tout synchroniser</span>
+                </button>
+            </div>
+            <div id="syncResults" class="mt-4 hidden">
+                <div class="p-4 rounded-lg" style="background:var(--color-card)">
+                    <p id="syncResultsText" class="text-sm text-foreground whitespace-pre-wrap"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div>
         <h3 class="card-title mb-3" style="font-size:1.0625rem">Informations système</h3>
         <div class="card">
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -224,5 +250,63 @@ try {
 
 checkConnections();
 loadProfile();
+
+function showSyncResults(text) {
+    var el = document.getElementById('syncResults');
+    var textEl = document.getElementById('syncResultsText');
+    textEl.textContent = text;
+    el.classList.remove('hidden');
+}
+
+async function syncZabbix() {
+    var btn = document.getElementById('btnSyncZabbix');
+    btn.disabled = true;
+    btn.querySelector('span').textContent = 'Synchronisation...';
+    try {
+        var res = await apiCall('/api/v1/sync/zabbix', { method: 'POST' });
+        var msg = 'Zabbix: ' + (res.created || 0) + ' créés, ' + (res.updated || 0) + ' mis à jour';
+        if (res.alerts) msg += ', ' + res.alerts + ' alertes';
+        showToast('Zabbix', msg, 'success');
+        showSyncResults(msg);
+    } catch (e) {
+        showToast('Zabbix', 'Erreur: ' + (e.message || 'Impossible de synchroniser'), 'error');
+    }
+    btn.disabled = false;
+    btn.querySelector('span').textContent = 'Synchroniser Zabbix';
+}
+
+async function syncElasticsearch() {
+    var btn = document.getElementById('btnSyncElastic');
+    btn.disabled = true;
+    btn.querySelector('span').textContent = 'Synchronisation...';
+    try {
+        var res = await apiCall('/api/v1/sync/elasticsearch');
+        showToast('Elasticsearch', 'Synchronisation terminée', 'success');
+        showSyncResults(JSON.stringify(res, null, 2));
+    } catch (e) {
+        showToast('Elasticsearch', 'Erreur: ' + (e.message || 'Impossible de joindre'), 'error');
+    }
+    btn.disabled = false;
+    btn.querySelector('span').textContent = 'Synchroniser Elasticsearch';
+}
+
+async function syncAll() {
+    var btn = document.getElementById('btnSyncAll');
+    btn.disabled = true;
+    btn.querySelector('span').textContent = 'Synchronisation...';
+    try {
+        var res = await apiCall('/api/v1/sync/all', { method: 'POST' });
+        var lines = [];
+        if (res.zabbix) lines.push('Zabbix: ' + (res.zabbix.hosts || 0) + ' hôtes');
+        if (res.elasticsearch) lines.push('ES: Connecté');
+        if (res.grafana) lines.push('Grafana: Connecté');
+        showToast('Synchronisation', 'Terminée avec succès', 'success');
+        showSyncResults(lines.join('\n'));
+    } catch (e) {
+        showToast('Synchronisation', 'Erreur: ' + (e.message || 'Échec'), 'error');
+    }
+    btn.disabled = false;
+    btn.querySelector('span').textContent = 'Tout synchroniser';
+}
 </script>
 @endpush

@@ -90,12 +90,12 @@ function typeBadge(t) {
 }
 
 function scoreDisplay(score) {
-    var pct = Math.round((score || 0) * 100);
+    var s = parseFloat(score) || 0;
     var color;
-    if (score > 0.7) color = 'var(--color-destructive)';
-    else if (score > 0.4) color = 'var(--color-warning)';
+    if (s > 0.7) color = 'var(--color-destructive)';
+    else if (s > 0.4) color = 'var(--color-warning)';
     else color = 'var(--color-success)';
-    return '<span style="font-weight:700;font-size:1.125rem;color:' + color + '">Score: ' + (score ? score.toFixed(2) : '0.00') + '</span>';
+    return '<span style="font-weight:700;font-size:1.125rem;color:' + color + '">Score: ' + s.toFixed(2) + '</span>';
 }
 
 function severityBorderColor(s) {
@@ -227,5 +227,6 @@ async function doMarkFalsePositive(id) {
 }
 
 loadAnomalies();
+setInterval(loadAnomalies, 15000);
 </script>
 @endpush

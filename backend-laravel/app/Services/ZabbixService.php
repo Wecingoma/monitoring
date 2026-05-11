@@ -66,9 +66,9 @@ class ZabbixService
 
         try {
             $defaultParams = [
-                'output' => ['extend'],
-                'selectInterfaces' => ['extend'],
-                'selectGroups' => ['extend'],
+                'output' => ['hostid', 'host', 'name', 'status', 'description'],
+                'selectInterfaces' => ['interfaceid', 'ip', 'available', 'dns', 'type', 'useip', 'port'],
+                'selectGroups' => ['groupid', 'name'],
             ];
 
             $response = Http::timeout($this->timeout)
@@ -166,68 +166,109 @@ class ZabbixService
         }
 
         try {
-            $params = [
-                'output' => ['extend'],
+            $itemParams = [
+                'output' => ['itemid', 'hostid', 'name', 'key_', 'lastvalue', 'units', 'value_type'],
                 'hostids' => $hostId,
-                'history' => 0,
-                'sortfield' => 'clock',
-                'sortorder' => 'DESC',
-                'limit' => 100,
+                'search' => ['key_' => 'cpu,memory,vfs.fs,net.if'],
+                'searchByAny' => true,
+                'searchWildcardsEnabled' => true,
+                'webitems' => true,
+                'sortfield' => 'name',
+                'sortorder' => 'ASC',
+                'limit' => 200,
             ];
-
-            if (!empty($itemKeys)) {
-                $params['search'] = ['key_' => implode(',', $itemKeys)];
-                $params['searchWildcardsEnabled'] = true;
-            }
 
             $itemsResponse = Http::timeout($this->timeout)
                 ->withHeaders(['Content-Type' => 'application/json-rpc'])
                 ->post($this->apiUrl, [
                     'jsonrpc' => '2.0',
                     'method' => 'item.get',
-                    'params' => $params,
+                    'params' => $itemParams,
                     'auth' => $token,
                     'id' => 1,
                 ]);
 
             $items = $itemsResponse->json()['result'] ?? [];
 
+            if (empty($items)) {
+                $allItemsParams = [
+                    'output' => ['itemid', 'hostid', 'name', 'key_', 'lastvalue', 'units', 'value_type'],
+                    'hostids' => $hostId,
+                    'filter' => ['value_type' => [0, 3]],
+                    'limit' => 200,
+                    'sortfield' => 'name',
+                    'sortorder' => 'ASC',
+                ];
+
+                $allItemsResponse = Http::timeout($this->timeout)
+                    ->withHeaders(['Content-Type' => 'application/json-rpc'])
+                    ->post($this->apiUrl, [
+                        'jsonrpc' => '2.0',
+                        'method' => 'item.get',
+                        'params' => $allItemsParams,
+                        'auth' => $token,
+                        'id' => 1,
+                    ]);
+
+                $items = $allItemsResponse->json()['result'] ?? [];
+            }
+
             $metrics = [];
             foreach ($items as $item) {
-$historyResponse = Http::timeout($this->timeout)
-                        ->withHeaders(['Content-Type' => 'application/json-rpc'])
-                        ->post($this->apiUrl, [
-                            'jsonrpc' => '2.0',
-                            'method' => 'history.get',
-                            'params' => [
-                                'output' => 'extend',
-                                'itemids' => [$item['itemid']],
-                                'sortfield' => 'clock',
-                                'sortorder' => 'DESC',
-                                'limit' => 60,
-                            ],
-                            'auth' => $token,
-                            'id' => 1,
-                        ]);
-
-                $history = $historyResponse->json()['result'] ?? [];
                 $metrics[$item['key_']] = [
                     'name' => $item['name'],
                     'key' => $item['key_'],
                     'lastvalue' => $item['lastvalue'] ?? null,
                     'units' => $item['units'] ?? '',
-                    'history' => array_map(function ($h) {
-                        return [
-                            'value' => $h['value'],
-                            'timestamp' => $h['clock'],
-                        ];
-                    }, $history),
+                    'itemid' => $item['itemid'],
+                    'value_type' => (int) ($item['value_type'] ?? 0),
+                    'history' => [],
                 ];
             }
 
             return $metrics;
         } catch (\Exception $e) {
             Log::error('Zabbix getMetrics error', ['message' => $e->getMessage()]);
+            return [];
+        }
+    }
+
+    public function getHistory(string $itemId, int $hours = 24, int $limit = 100, int $valueType = -1): array
+    {
+        $token = $this->authenticate();
+        if (!$token) {
+            return [];
+        }
+
+        try {
+            $timeFrom = time() - ($hours * 3600);
+
+            $params = [
+                'output' => 'extend',
+                'itemids' => [$itemId],
+                'time_from' => $timeFrom,
+                'sortfield' => 'clock',
+                'sortorder' => 'ASC',
+                'limit' => $limit,
+            ];
+
+            if ($valueType >= 0) {
+                $params['history'] = $valueType;
+            }
+
+            $response = Http::timeout($this->timeout)
+                ->withHeaders(['Content-Type' => 'application/json-rpc'])
+                ->post($this->apiUrl, [
+                    'jsonrpc' => '2.0',
+                    'method' => 'history.get',
+                    'params' => $params,
+                    'auth' => $token,
+                    'id' => 1,
+                ]);
+
+            return $response->json()['result'] ?? [];
+        } catch (\Exception $e) {
+            Log::error('Zabbix getHistory error', ['message' => $e->getMessage()]);
             return [];
         }
     }

@@ -49,7 +49,7 @@
                 </div>
             </div>
             <p class="text-3xl font-bold text-foreground" id="openIncidents">--</p>
-            <p class="text-xs text-muted-foreground mt-1">En cours</p>
+            <p class="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">En cours <span class="inline-block w-2 h-2 rounded-full bg-green-500" style="animation:pulse-dot 2s ease-in-out infinite"></span></p>
         </div>
 
     </div>
@@ -76,11 +76,36 @@
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="card">
+            <div class="card-header">
+                <div class="flex items-center justify-between">
+                    <p class="card-title">Utilisation Disque</p>
+                    <div class="flex items-center gap-4 text-xs text-muted-foreground">
+                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm" style="background:#f59e0b"></span>Disque %</span>
+                    </div>
+                </div>
+            </div>
+            <div id="diskChart" style="height:220px"></div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <div class="flex items-center justify-between">
+                    <p class="card-title">Trafic Réseau</p>
+                    <div class="flex items-center gap-4 text-xs text-muted-foreground">
+                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm" style="background:#8b5cf6"></span>Mbps</span>
+                    </div>
+                </div>
+            </div>
+            <div id="networkChart" style="height:220px"></div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
         <div class="card">
             <div class="card-header">
                 <div class="flex items-center justify-between">
-                    <p class="card-title">Serveurs</p>
+                    <p class="card-title">Hôtes</p>
                     <a href="/servers" class="text-xs text-muted-foreground hover:text-foreground transition-colors">Voir tout &rarr;</a>
                 </div>
             </div>
@@ -93,10 +118,11 @@
                             <th>CPU</th>
                             <th>RAM</th>
                             <th>Disque</th>
+                            <th>Réseau</th>
                         </tr>
                     </thead>
                     <tbody id="serversTable">
-                        <tr><td colspan="5" class="text-center text-muted-foreground py-8">Chargement...</td></tr>
+                        <tr><td colspan="6" class="text-center text-muted-foreground py-8">Chargement...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -148,11 +174,18 @@
 @endsection
 
 @push('scripts')
+<style>
+    @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+</style>
 <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
 <script>
 var metricsChartInstance = null;
 var alertsChartInstance = null;
-var REFRESH_INTERVAL = 60000;
+var diskChartInstance = null;
+var networkChartInstance = null;
+var REFRESH_INTERVAL = 15000;
+var lastAlertCheck = new Date().toISOString();
+var knownAlertIds = [];
 
 function getStatusBadge(status) {
     var map = {
@@ -222,16 +255,18 @@ function typeBadge(type) {
 function renderServers(servers) {
     var tbody = document.getElementById('serversTable');
     if (!servers || !servers.length) {
-        tbody.innerHTML = '<tr><td colspan="5" class="py-8 text-center text-muted-foreground">Aucun serveur</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="py-8 text-center text-muted-foreground">Aucun serveur</td></tr>';
         return;
     }
     tbody.innerHTML = servers.slice(0, 8).map(function(s) {
+        var netVal = s.network != null ? parseFloat(s.network).toFixed(2) : '0';
         return '<tr>' +
             '<td><a href="/servers/' + s.id + '" class="text-foreground hover:text-primary transition-colors font-medium">' + s.name + '</a></td>' +
             '<td>' + getStatusBadge(s.status) + '</td>' +
             '<td>' + getProgressBar(s.cpu, 'progress-blue') + '</td>' +
             '<td>' + getProgressBar(s.ram, 'progress-blue') + '</td>' +
             '<td>' + getProgressBar(s.disk, 'progress-blue') + '</td>' +
+            '<td><span class="text-xs font-mono" style="color:var(--color-muted-foreground)">' + netVal + ' Mbps</span></td>' +
         '</tr>';
     }).join('');
 }
@@ -293,10 +328,21 @@ function renderLogs(logs) {
 
 function renderMetricsChart(cpuData, ramData) {
     var el = document.getElementById('metricsChart');
-    if (metricsChartInstance) metricsChartInstance.destroy();
     var cpuSeries = Object.values(cpuData);
     var ramSeries = Object.values(ramData);
     var categories = Object.keys(cpuData).map(function(k) { return k.split(' ')[1] || k; });
+
+    if (metricsChartInstance) {
+        metricsChartInstance.updateOptions({
+            xaxis: { categories: categories },
+            series: [
+                { name: 'CPU %', data: cpuSeries },
+                { name: 'RAM %', data: ramSeries }
+            ]
+        });
+        return;
+    }
+
     var options = {
         chart: {
             type: 'area',
@@ -349,6 +395,103 @@ function renderMetricsChart(cpuData, ramData) {
     };
     metricsChartInstance = new ApexCharts(el, options);
     metricsChartInstance.render();
+}
+
+function renderDiskChart(diskData) {
+    var el = document.getElementById('diskChart');
+    var series = Object.values(diskData);
+    var categories = Object.keys(diskData).map(function(k) { return k.split(' ')[1] || k; });
+
+    if (diskChartInstance) {
+        diskChartInstance.updateOptions({
+            xaxis: { categories: categories },
+            series: [{ name: 'Disque %', data: series }]
+        });
+        return;
+    }
+
+    var options = {
+        chart: {
+            type: 'area',
+            background: 'transparent',
+            foreColor: 'var(--color-muted-foreground)',
+            fontFamily: 'inherit',
+            toolbar: { show: false },
+            animations: { enabled: true, easing: 'easeinout', speed: 600 }
+        },
+        series: [{ name: 'Disque %', data: series }],
+        xaxis: {
+            categories: categories,
+            labels: { style: { colors: 'var(--color-muted-foreground)', fontSize: '11px' } },
+            axisBorder: { color: 'var(--color-border)' },
+            axisTicks: { color: 'var(--color-border)' }
+        },
+        yaxis: {
+            labels: {
+                style: { colors: 'var(--color-muted-foreground)', fontSize: '11px' },
+                formatter: function(v) { return Math.round(v) + '%'; }
+            },
+            max: 100,
+            tickAmount: 5
+        },
+        colors: ['#f59e0b'],
+        stroke: { curve: 'smooth', width: 2 },
+        fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.35, opacityTo: 0.05, stops: [0, 95, 100] } },
+        grid: { borderColor: 'var(--color-border)', strokeDashArray: 4, xaxis: { lines: { show: false } } },
+        tooltip: { theme: 'dark', y: { formatter: function(v) { return v + '%'; } } },
+        legend: { show: false },
+        markers: { size: 0, hover: { size: 5, sizeOffset: 3 } }
+    };
+    diskChartInstance = new ApexCharts(el, options);
+    diskChartInstance.render();
+}
+
+function renderNetworkChart(netData) {
+    var el = document.getElementById('networkChart');
+    var series = Object.values(netData);
+    var categories = Object.keys(netData).map(function(k) { return k.split(' ')[1] || k; });
+
+    if (networkChartInstance) {
+        networkChartInstance.updateOptions({
+            xaxis: { categories: categories },
+            series: [{ name: 'Réseau Mbps', data: series }]
+        });
+        return;
+    }
+
+    var options = {
+        chart: {
+            type: 'area',
+            background: 'transparent',
+            foreColor: 'var(--color-muted-foreground)',
+            fontFamily: 'inherit',
+            toolbar: { show: false },
+            animations: { enabled: true, easing: 'easeinout', speed: 600 }
+        },
+        series: [{ name: 'Réseau Mbps', data: series }],
+        xaxis: {
+            categories: categories,
+            labels: { style: { colors: 'var(--color-muted-foreground)', fontSize: '11px' } },
+            axisBorder: { color: 'var(--color-border)' },
+            axisTicks: { color: 'var(--color-border)' }
+        },
+        yaxis: {
+            labels: {
+                style: { colors: 'var(--color-muted-foreground)', fontSize: '11px' },
+                formatter: function(v) { return parseFloat(v).toFixed(2) + ' Mbps'; }
+            },
+            tickAmount: 4
+        },
+        colors: ['#8b5cf6'],
+        stroke: { curve: 'smooth', width: 2 },
+        fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.35, opacityTo: 0.05, stops: [0, 95, 100] } },
+        grid: { borderColor: 'var(--color-border)', strokeDashArray: 4, xaxis: { lines: { show: false } } },
+        tooltip: { theme: 'dark', y: { formatter: function(v) { return parseFloat(v).toFixed(3) + ' Mbps'; } } },
+        legend: { show: false },
+        markers: { size: 0, hover: { size: 5, sizeOffset: 3 } }
+    };
+    networkChartInstance = new ApexCharts(el, options);
+    networkChartInstance.render();
 }
 
 function renderAlertsChart(chartData) {
@@ -428,15 +571,36 @@ async function loadDashboard() {
         renderLogs(data.recent_logs || []);
         renderAlertsChart(data.alerts_chart || {});
         renderMetricsChart(data.cpu_trend || {}, data.ram_trend || {});
-
-        showToast('Données mises à jour', '', 'success');
+        renderDiskChart(data.disk_trend || {});
+        renderNetworkChart(data.network_trend || {});
     } catch (e) {
         console.error('Erreur chargement dashboard:', e);
-        showToast('Erreur', 'Impossible de charger les données', 'error');
     }
+}
+
+async function pollNewAlerts() {
+    try {
+        var alerts = await apiCall('/api/v1/alerts/new?since=' + encodeURIComponent(lastAlertCheck));
+        if (alerts && alerts.length > 0) {
+            alerts.forEach(function(a) {
+                if (knownAlertIds.indexOf(a.id) === -1) {
+                    knownAlertIds.push(a.id);
+                    var icon = a.severity === 'critical' ? '🔴' : (a.severity === 'warning' ? '🟡' : '🔵');
+                    var serverInfo = a.server_name ? ' [' + a.server_name + ']' : '';
+                    showToast(
+                        icon + ' Alerte ' + a.severity,
+                        a.title + serverInfo,
+                        a.severity === 'critical' ? 'error' : (a.severity === 'warning' ? 'warning' : 'info')
+                    );
+                }
+            });
+        }
+        lastAlertCheck = new Date().toISOString();
+    } catch (e) {}
 }
 
 loadDashboard();
 setInterval(loadDashboard, REFRESH_INTERVAL);
+setInterval(pollNewAlerts, 10000);
 </script>
 @endpush

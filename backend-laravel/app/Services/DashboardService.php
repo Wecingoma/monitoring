@@ -14,7 +14,7 @@ class DashboardService
 {
     public function getOverviewStats(): array
     {
-        return Cache::remember('dashboard_overview', 60, function () {
+        return Cache::remember('dashboard_overview', 10, function () {
             return [
                 'total_servers' => Server::count(),
                 'online_servers' => Server::online()->count(),
@@ -31,8 +31,8 @@ class DashboardService
 
     public function getSystemMetrics(): array
     {
-        return Cache::remember('dashboard_metrics', 120, function () {
-            $servers = Server::online()->get();
+        return Cache::remember('dashboard_metrics', 10, function () {
+            $servers = Server::whereIn('status', ['online', 'warning'])->get();
             
             return [
                 'avg_cpu' => $servers->avg('cpu_usage'),
@@ -56,7 +56,7 @@ class DashboardService
 
     public function getRecentAlerts(int $limit = 10): array
     {
-        return Cache::remember('dashboard_recent_alerts', 30, function () use ($limit) {
+        return Cache::remember('dashboard_recent_alerts', 10, function () use ($limit) {
             return Alert::with('server')
                 ->orderBy('created_at', 'desc')
                 ->limit($limit)
@@ -76,7 +76,7 @@ class DashboardService
 
     public function getRecentAnomalies(int $limit = 10): array
     {
-        return Cache::remember('dashboard_recent_anomalies', 30, function () use ($limit) {
+        return Cache::remember('dashboard_recent_anomalies', 10, function () use ($limit) {
             return Anomaly::with('server')
                 ->notFalsePositive()
                 ->orderBy('detected_at', 'desc')
@@ -97,7 +97,7 @@ class DashboardService
 
     public function getRecentLogs(int $limit = 20): array
     {
-        return Cache::remember('dashboard_recent_logs', 30, function () use ($limit) {
+        return Cache::remember('dashboard_recent_logs', 10, function () use ($limit) {
             return SystemLog::with('server')
                 ->orderBy('logged_at', 'desc')
                 ->limit($limit)
@@ -116,7 +116,7 @@ class DashboardService
 
     public function getAlertsBySeverityChart(): array
     {
-        return Cache::remember('dashboard_alerts_chart', 300, function () {
+        return Cache::remember('dashboard_alerts_chart', 10, function () {
             $alerts = Alert::selectRaw('severity, count(*) as count')
                 ->groupBy('severity')
                 ->pluck('count', 'severity')
@@ -132,7 +132,7 @@ class DashboardService
 
     public function getMetricsTrend(string $type = 'cpu', int $hours = 24): array
     {
-        return Cache::remember("dashboard_metrics_trend_{$type}", 300, function () use ($type, $hours) {
+        return Cache::remember("dashboard_metrics_trend_{$type}", 10, function () use ($type, $hours) {
             return Metric::where('type', $type)
                 ->where('recorded_at', '>=', now()->subHours($hours))
                 ->selectRaw("TO_CHAR(recorded_at, 'YYYY-MM-DD HH24:00') as hour, AVG(value) as avg_value")
@@ -154,6 +154,8 @@ class DashboardService
             'alerts_chart' => $this->getAlertsBySeverityChart(),
             'cpu_trend' => $this->getMetricsTrend('cpu'),
             'ram_trend' => $this->getMetricsTrend('ram'),
+            'disk_trend' => $this->getMetricsTrend('disk'),
+            'network_trend' => $this->getMetricsTrend('network'),
         ];
     }
 }

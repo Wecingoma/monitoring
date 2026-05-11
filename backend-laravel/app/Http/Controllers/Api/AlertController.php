@@ -15,6 +15,27 @@ class AlertController extends Controller
         private AuditService $auditService
     ) {}
 
+    public function newAlerts(Request $request): JsonResponse
+    {
+        $since = $request->query('since', now()->subMinutes(2)->toDateTimeString());
+
+        $alerts = Alert::with('server')
+            ->where('created_at', '>', $since)
+            ->where('status', 'active')
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(fn($a) => [
+                'id' => $a->id,
+                'title' => $a->title,
+                'severity' => $a->severity,
+                'source' => $a->source,
+                'server_name' => $a->server?->name,
+                'created_at' => $a->created_at->toIso8601String(),
+            ]);
+
+        return response()->json($alerts);
+    }
+
     public function index(Request $request): JsonResponse
     {
         $query = Alert::with('server', 'user');

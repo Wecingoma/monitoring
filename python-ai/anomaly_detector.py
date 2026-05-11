@@ -18,7 +18,7 @@ class AnomalyDetector:
         os.makedirs(self.model_dir, exist_ok=True)
         self._load_models()
         if not self.models:
-            self._initialize_default_models()
+            logger.info("Aucun modèle trouvé. En attente de données réelles pour l'entraînement.")
 
     def _load_models(self):
         metric_types = ['cpu', 'ram', 'network', 'disk']
@@ -31,51 +31,6 @@ class AnomalyDetector:
             if os.path.exists(scaler_path):
                 self.scalers[mtype] = joblib.load(scaler_path)
 
-    def _initialize_default_models(self):
-        metric_types = ['cpu', 'ram', 'network', 'disk']
-        for mtype in metric_types:
-            n_estimators = 100
-            contamination = 0.1
-            model = IsolationForest(
-                n_estimators=n_estimators,
-                contamination=contamination,
-                random_state=42,
-                n_jobs=-1
-            )
-            scaler = StandardScaler()
-            np.random.seed(42)
-            normal_data = self._generate_normal_data(mtype, 1000)
-            scaler.fit(normal_data)
-            scaled_data = scaler.transform(normal_data)
-            model.fit(scaled_data)
-            self.models[mtype] = model
-            self.scalers[mtype] = scaler
-            self._save_model(mtype, model, scaler)
-            logger.info(f"Initialized default model for {mtype}")
-
-    def _generate_normal_data(self, metric_type, n_samples):
-        np.random.seed(42)
-        if metric_type == 'cpu':
-            values = np.random.normal(35, 15, n_samples)
-            values = np.clip(values, 5, 95)
-        elif metric_type == 'ram':
-            values = np.random.normal(55, 12, n_samples)
-            values = np.clip(values, 20, 90)
-        elif metric_type == 'network':
-            values = np.random.normal(25, 10, n_samples)
-            values = np.clip(values, 1, 80)
-        elif metric_type == 'disk':
-            values = np.random.normal(50, 15, n_samples)
-            values = np.clip(values, 10, 95)
-        else:
-            values = np.random.normal(40, 15, n_samples)
-            values = np.clip(values, 1, 99)
-        timestamps = np.arange(n_samples, dtype=float)
-        diffs = np.diff(values)
-        diffs = np.append([0], diffs)
-        features = np.column_stack([values, diffs, timestamps / n_samples])
-        return features
-
     def _save_model(self, metric_type, model, scaler):
         model_path = os.path.join(self.model_dir, f'isolation_forest_{metric_type}.joblib')
         scaler_path = os.path.join(self.model_dir, f'scaler_{metric_type}.joblib')
@@ -87,9 +42,6 @@ class AnomalyDetector:
 
     def detect(self, metrics, metric_type='cpu', server_name='unknown'):
         self.detection_count += 1
-
-        if metric_type not in self.models:
-            self._initialize_default_models()
 
         model = self.models.get(metric_type)
         scaler = self.scalers.get(metric_type)
@@ -222,30 +174,6 @@ class AnomalyDetector:
             }
         }
         return recommendations.get(metric_type, recommendations.get('cpu', {})).get(severity, 'Aucune recommandation')
-
-    def detect_all_patterns(self):
-        results = []
-        metric_types = ['cpu', 'ram', 'network', 'disk']
-        for mtype in metric_types:
-            np.random.seed(int(np.random.randint(0, 10000)))
-            synthetic_data = self._generate_normal_data(mtype, 50)
-            model = self.models.get(mtype)
-            scaler = self.scalers.get(mtype)
-            if model and scaler:
-                scaled = scaler.transform(synthetic_data)
-                scores = model.decision_function(scaled)
-                predictions = model.predict(scaled)
-                anomaly_count = int(np.sum(predictions == -1))
-                if anomaly_count > 0:
-                    max_score = float(np.max(np.abs(scores)))
-                    severity = self._determine_severity(max_score, float(np.mean(synthetic_data[:, 0])), mtype)
-                    results.append({
-                        'metric_type': mtype,
-                        'anomaly_count': anomaly_count,
-                        'max_score': round(max_score, 2),
-                        'severity': severity,
-                    })
-        return results
 
     def get_stats(self):
         return {
