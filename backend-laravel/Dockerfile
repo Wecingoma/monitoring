@@ -42,6 +42,11 @@ RUN npm run build
 # Permissions Laravel
 RUN chmod -R 775 storage bootstrap/cache
 
+
+RUN mkdir -p database \
+    && touch database/database.sqlite
+
+
 # Générer caches Laravel
 RUN php artisan config:clear \
     && php artisan cache:clear \
