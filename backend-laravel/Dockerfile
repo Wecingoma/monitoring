@@ -2,41 +2,25 @@ FROM php:8.3-fpm-alpine
 
 WORKDIR /var/www/html
 
-# Dépendances système
 RUN apk add --no-cache \
-    bash \
-    git \
-    unzip \
-    curl \
     nginx \
-    libpq-dev \
-    oniguruma-dev \
+    postgresql-dev \
     linux-headers \
-    $PHPIZE_DEPS
+    $PHPIZE_DEPS \
+    && docker-php-ext-install pdo_pgsql pgsql pcntl \
+    && pecl install redis sodium \
+    && docker-php-ext-enable redis sodium
 
-# Extensions PHP
-RUN docker-php-ext-install \
-    pdo \
-    pdo_pgsql \
-    pgsql \
-    mbstring \
-    pcntl
-
-# Redis
-RUN pecl install redis \
-    && docker-php-ext-enable redis
-
-# Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Copier le projet
 COPY . .
 
-# Installer Laravel
-RUN composer install --no-dev --optimize-autoloader
+RUN composer install --no-interaction --optimize-autoloader --no-dev \
+    && php artisan key:generate --force \
+    && php artisan config:cache
 
-# Permissions
-RUN chmod -R 775 storage bootstrap/cache
+RUN mkdir -p storage/logs \
+    && chmod -R 775 storage bootstrap/cache
 
 EXPOSE 8000
 
