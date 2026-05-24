@@ -14,6 +14,7 @@ class AiService
 
     public function __construct()
     {
+        //$this->serviceUrl = config('monitoring.ai.service_url', 'http://localhost:5000');
         $this->serviceUrl = config('monitoring.ai.service_url', 'http://localhost:5000');
         $this->timeout = config('monitoring.ai.timeout', 30);
     }

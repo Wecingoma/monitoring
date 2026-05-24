@@ -16,7 +16,7 @@ Route::get('/register', function () {
 
 Route::get('/dashboard', function () {
     return view('dashboard');
-})->name('dashboard');
+})->name('dashboard1');
 
 Route::get('/servers', function () {
     return view('servers.index');
